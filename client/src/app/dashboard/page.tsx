@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { Plus, User, CheckCircle2, Clock } from "lucide-react";
+import { Plus, User, Clock } from "lucide-react";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,6 @@ interface Student {
   name: string;
   parent_phone: string;
   standard_fee: string;
-  // We will add 'status' logic later, assuming 'PENDING' for now
   status?: "PAID" | "PENDING";
 }
 
@@ -46,7 +45,10 @@ export default function Dashboard() {
     standard_fee: "",
   });
 
-  // 1. Load Data on Startup
+  // 1. Define the API URL (Works on Vercel AND Localhost)
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+  // 2. Load Data on Startup
   useEffect(() => {
     const storedTutor = localStorage.getItem("tutor");
     if (!storedTutor) {
@@ -57,14 +59,13 @@ export default function Dashboard() {
     const tutorData = JSON.parse(storedTutor);
     setTutor(tutorData);
     fetchStudents(tutorData.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  // 2. Fetch Students from Backend
+  // 3. Fetch Students from Backend
   const fetchStudents = async (tutorId: string) => {
     try {
-      const res = await axios.get(
-        `http://localhost:5000/api/students/${tutorId}`
-      );
+      const res = await axios.get(`${API_URL}/students/${tutorId}`);
       setStudents(res.data);
     } catch (error) {
       console.error("Failed to load students", error);
@@ -73,17 +74,17 @@ export default function Dashboard() {
     }
   };
 
-  // 3. Handle Add Student Submit
+  // 4. Handle Add Student Submit
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tutor) return;
 
     try {
-      await axios.post(`http://localhost:5000/api/students/add`, {
+      await axios.post(`${API_URL}/students/add`, {
         tutor_id: tutor.id,
         ...newStudent,
       });
-      
+
       // Refresh list and close popup
       fetchStudents(tutor.id);
       setIsDialogOpen(false);
@@ -104,7 +105,7 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold text-gray-800">My Students</h1>
             <p className="text-sm text-gray-500">{tutor?.business_name}</p>
           </div>
-          
+
           {/* Add Student Button (Opens Modal) */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -119,34 +120,48 @@ export default function Dashboard() {
               <form onSubmit={handleAddStudent} className="space-y-4 mt-2">
                 <div>
                   <Label>Student Name</Label>
-                  <Input 
-                    required 
+                  <Input
+                    required
                     value={newStudent.name}
-                    onChange={(e) => setNewStudent({...newStudent, name: e.target.value})}
-                    placeholder="Rahul Kumar" 
+                    onChange={(e) =>
+                      setNewStudent({ ...newStudent, name: e.target.value })
+                    }
+                    placeholder="Rahul Kumar"
                   />
                 </div>
                 <div>
                   <Label>Parent's WhatsApp</Label>
-                  <Input 
-                    required 
+                  <Input
+                    required
                     type="tel"
                     value={newStudent.parent_phone}
-                    onChange={(e) => setNewStudent({...newStudent, parent_phone: e.target.value})}
-                    placeholder="9876543210" 
+                    onChange={(e) =>
+                      setNewStudent({
+                        ...newStudent,
+                        parent_phone: e.target.value,
+                      })
+                    }
+                    placeholder="9876543210"
                   />
                 </div>
                 <div>
                   <Label>Monthly Fee (₹)</Label>
-                  <Input 
-                    required 
+                  <Input
+                    required
                     type="number"
                     value={newStudent.standard_fee}
-                    onChange={(e) => setNewStudent({...newStudent, standard_fee: e.target.value})}
-                    placeholder="500" 
+                    onChange={(e) =>
+                      setNewStudent({
+                        ...newStudent,
+                        standard_fee: e.target.value,
+                      })
+                    }
+                    placeholder="500"
                   />
                 </div>
-                <Button type="submit" className="w-full">Save Student</Button>
+                <Button type="submit" className="w-full">
+                  Save Student
+                </Button>
               </form>
             </DialogContent>
           </Dialog>
@@ -163,59 +178,80 @@ export default function Dashboard() {
           </div>
         ) : (
           students.map((student) => (
-            <Card key={student.id} className="overflow-hidden shadow-sm hover:shadow-md transition">
+            <Card
+              key={student.id}
+              className="overflow-hidden shadow-sm hover:shadow-md transition"
+            >
               <CardContent className="p-4 flex items-center justify-between">
-  <div className="flex items-center gap-3">
-    <Avatar>
-      <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
-        {student.name.charAt(0)}
-      </AvatarFallback>
-    </Avatar>
-    <div>
-      <h3 className="font-semibold text-gray-800">{student.name}</h3>
-      <p className="text-xs text-gray-500">Fee: ₹{student.standard_fee}</p>
-    </div>
-  </div>
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
+                      {student.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="font-semibold text-gray-800">
+                      {student.name}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Fee: ₹{student.standard_fee}
+                    </p>
+                  </div>
+                </div>
 
-  <div className="flex gap-2">
-    {/* 
-       For this MVP, we will simulate the flow:
-       Clicking this button creates a PAID invoice for "November" immediately
-       and opens the receipt.
-    */}
-    <Button 
-      size="sm" 
-      variant="outline" 
-      className="text-green-600 border-green-200 hover:bg-green-50"
-      onClick={async () => {
-        if(!confirm(`Mark ${student.name} as PAID for this month?`)) return;
-        
-        try {
-          // 1. Create Invoice
-          const res1 = await axios.post('http://localhost:5000/api/invoices/create', {
-            student_id: student.id,
-            tutor_id: tutor?.id,
-            month_name: "November 2025", // Hardcoded for demo
-            amount: student.standard_fee
-          });
-          
-          const invoiceId = res1.data.invoice.id;
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-green-600 border-green-200 hover:bg-green-50"
+                    onClick={async () => {
+                      if (
+                        !confirm(
+                          `Mark ${student.name} as PAID for this month?`
+                        )
+                      )
+                        return;
 
-          // 2. Mark Paid
-          await axios.put(`http://localhost:5000/api/invoices/${invoiceId}/pay`);
+                      try {
+                        // 1. Create Invoice
+                        const res1 = await axios.post(
+                          `${API_URL}/invoices/create`,
+                          {
+                            student_id: student.id,
+                            tutor_id: tutor?.id,
+                            month_name: "November 2025",
+                            amount: student.standard_fee,
+                          }
+                        );
 
-          // 3. Open Receipt in New Tab
-          window.open(`http://localhost:5000/api/invoices/${invoiceId}/receipt`, '_blank');
-          
-        } catch (err: any) {
-           alert(err.response?.data?.error || "Error marking paid");
-        }
-      }}
-    >
-      Mark Paid
-    </Button>
-  </div>
-</CardContent>
+                        const invoiceId = res1.data.invoice.id;
+
+                        // 2. Mark Paid
+                        await axios.put(
+                          `${API_URL}/invoices/${invoiceId}/pay`
+                        );
+
+                        // 3. Generate WhatsApp Link
+                        const receiptLink = `${API_URL}/invoices/${invoiceId}/receipt`;
+                        
+                        const message = `Hello! Fees for ${student.name} is received. Download Receipt: ${receiptLink}`;
+                        
+                        const whatsappUrl = `https://wa.me/${student.parent_phone}?text=${encodeURIComponent(message)}`;
+
+                        // 4. Open WhatsApp
+                        window.open(whatsappUrl, "_blank");
+
+                      } catch (err: any) {
+                        alert(
+                          err.response?.data?.error || "Error marking paid"
+                        );
+                      }
+                    }}
+                  >
+                    Mark Paid
+                  </Button>
+                </div>
+              </CardContent>
             </Card>
           ))
         )}

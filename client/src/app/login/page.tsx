@@ -39,7 +39,9 @@ export default function LoginPage() {
 
     try {
       // NOTE: Ensure your Backend is running on Port 5000
-      const url = `http://localhost:5000/api/tutors/register`;
+      // Use the environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const url = `${API_URL}/tutors/register`;
       
       // We are reusing the register endpoint. 
       // Logic: If user exists, backend throws error -> We treat as Login for MVP.
