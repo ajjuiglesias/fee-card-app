@@ -8,6 +8,8 @@ const tutorRoutes = require('./routes/tutorRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const batchRoutes = require('./routes/batchRoutes');
+const whatsappRoutes = require('./routes/whatsappRoutes');
 const initCronJobs = require('./cron/reminderCron');
 const { handleRazorpayWebhook } = require('./controllers/webhookController');
 
@@ -22,6 +24,8 @@ app.use('/api/tutors', tutorRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/batches', batchRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Start the Automated Reminders
 initCronJobs();
