@@ -14,27 +14,35 @@ const razorpay = new Razorpay({
 const createOrder = async (req, res) => {
     const { amount, student_id, tutor_id, month_name } = req.body;
 
+    console.log('📥 Payment order request received:', { amount, student_id, tutor_id, month_name });
+
     if (!amount || !student_id || !tutor_id || !month_name) {
+        console.log('❌ Missing required fields');
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
     try {
         // 1. Check if invoice already exists for this student + month
+        console.log('🔍 Checking for existing invoice...');
         const existing = await db.query(
             'SELECT * FROM invoices WHERE student_id = $1 AND month_name = $2',
             [student_id, month_name]
         );
+        console.log(`✅ Database query successful. Found ${existing.rows.length} existing invoices`);
 
         let invoiceId;
 
         if (existing.rows.length > 0) {
             // Invoice exists - check if already paid
             if (existing.rows[0].status === 'PAID') {
+                console.log('⚠️ Invoice already paid');
                 return res.status(400).json({ error: 'This month has already been paid' });
             }
             invoiceId = existing.rows[0].id;
+            console.log('📋 Using existing invoice:', invoiceId);
         } else {
             // 2. Create Invoice in Database (status: PENDING)
+            console.log('📝 Creating new invoice in database...');
             const invoiceResult = await db.query(
                 `INSERT INTO invoices (student_id, tutor_id, month_name, amount, status) 
                  VALUES ($1, $2, $3, $4, 'PENDING') 
@@ -42,9 +50,11 @@ const createOrder = async (req, res) => {
                 [student_id, tutor_id, month_name, amount]
             );
             invoiceId = invoiceResult.rows[0].id;
+            console.log('✅ Invoice created:', invoiceId);
         }
 
         // 3. Create Razorpay Order
+        console.log('💳 Creating Razorpay order...');
         const options = {
             amount: parseFloat(amount) * 100, // Convert to paise
             currency: 'INR',
@@ -56,20 +66,33 @@ const createOrder = async (req, res) => {
                 invoice_id: invoiceId
             }
         };
+        console.log('Razorpay options:', { ...options, amount: options.amount + ' paise' });
 
         const order = await razorpay.orders.create(options);
+        console.log('✅ Razorpay order created:', order.id);
 
         // 4. Return Order Details to Frontend
-        res.json({
+        const response = {
             id: order.id,
             currency: order.currency,
             amount: order.amount,
             key_id: process.env.RAZORPAY_KEY_ID
-        });
+        };
+        console.log('📤 Sending response to frontend:', response);
+        res.json(response);
 
     } catch (error) {
-        console.error('Create Order Error:', error);
-        res.status(500).json({ error: 'Failed to create payment order', details: error.message });
+        console.error('❌ Create Order Error:', error);
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
+        res.status(500).json({
+            error: 'Failed to create payment order',
+            details: error.message,
+            type: error.name
+        });
     }
 };
 
