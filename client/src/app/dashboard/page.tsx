@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { Plus, User, Clock } from "lucide-react";
+import { Plus, User, Trash2, CheckCircle2, Clock } from "lucide-react";
 
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,6 +41,7 @@ interface Student {
   parent_phone: string;
   standard_fee: string;
   status?: "PAID" | "PENDING";
+  last_payment_month?: string;
 }
 
 export default function Dashboard() {
@@ -35,6 +49,7 @@ export default function Dashboard() {
   const [tutor, setTutor] = useState<Tutor | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
 
   // Form State for Adding Student
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -44,14 +59,13 @@ export default function Dashboard() {
     standard_fee: "",
   });
 
-  // 1. Define the API URL (Works on Vercel AND Localhost)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-  // 2. Load Data on Startup
+  // Load Data on Startup
   useEffect(() => {
     const storedTutor = localStorage.getItem("tutor");
     if (!storedTutor) {
-      router.push("/login"); // Kick them out if not logged in
+      router.push("/login");
       return;
     }
 
@@ -61,7 +75,18 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  // 3. Fetch Students from Backend
+  // Auto-refresh every 30 seconds to check for payment updates
+  useEffect(() => {
+    if (!tutor) return;
+    
+    const interval = setInterval(() => {
+      fetchStudents(tutor.id);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [tutor]);
+
+  // Fetch Students from Backend
   const fetchStudents = async (tutorId: string) => {
     try {
       const res = await axios.get(`${API_URL}/students/${tutorId}`);
@@ -73,7 +98,7 @@ export default function Dashboard() {
     }
   };
 
-  // 4. Handle Add Student Submit
+  // Handle Add Student Submit
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tutor) return;
@@ -84,53 +109,50 @@ export default function Dashboard() {
         ...newStudent,
       });
 
-      // Refresh list and close popup
       fetchStudents(tutor.id);
       setIsDialogOpen(false);
-      setNewStudent({ name: "", parent_phone: "", standard_fee: "" }); // Reset form
+      setNewStudent({ name: "", parent_phone: "", standard_fee: "" });
     } catch (error) {
       alert("Failed to add student");
     }
   };
 
-// client/src/app/dashboard/page.tsx
+  // Handle Delete Student
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    try {
+      await axios.delete(`${API_URL}/students/${studentId}`);
+      fetchStudents(tutor!.id);
+    } catch (error) {
+      alert(`Failed to delete ${studentName}`);
+    }
+  };
 
-  // ... inside your Dashboard component ...
-
+  // Handle Request Payment
   const handleRequestPayment = (student: Student) => {
     if (!tutor) {
       alert("Tutor data missing. Please log in again.");
       return;
     }
 
-    // A. Prepare Data
-    const baseUrl = window.location.origin; 
-    
+    const baseUrl = window.location.origin;
     const params = new URLSearchParams({
-      // DATA FOR PAYMENT PROCESSING
-      sid: student.id,       // <--- NEW: Student ID
-      tid: tutor.id,         // <--- NEW: Tutor ID
+      sid: student.id,
+      tid: tutor.id,
       am: student.standard_fee,
-      
-      // DATA FOR DISPLAY ONLY
-      pn: tutor.business_name, 
+      pn: tutor.business_name,
       tn: `Fee for ${student.name}`,
     });
 
-    // B. Generate Link
     const paymentPageLink = `${baseUrl}/pay?${params.toString()}`;
-
-    // C. WhatsApp Message
     const messageText = encodeURIComponent(
-      `*Fees Due for ${student.name}: ₹${student.standard_fee}*\n\nClick below to pay securely:\n${paymentPageLink}\n\n*Receipt will be sent automatically after payment.*`
+      `*Fees Due for ${student.name}: ₹${student.standard_fee}*\\n\\nClick below to pay securely:\\n${paymentPageLink}\\n\\n*Receipt will be sent automatically after payment.*`
     );
 
     const whatsappUrl = `https://wa.me/${student.parent_phone}?text=${messageText}`;
     window.open(whatsappUrl, "_blank");
   };
 
-  
-  // 6. Existing Mark Paid Handler (Steps 3-6)
+  // Handle Mark Paid
   const handleMarkPaid = async (student: Student) => {
     if (
       !confirm(
@@ -140,7 +162,6 @@ export default function Dashboard() {
       return;
 
     try {
-      // 1. Create Invoice
       const res1 = await axios.post(`${API_URL}/invoices/create`, {
         student_id: student.id,
         tutor_id: tutor?.id,
@@ -152,26 +173,28 @@ export default function Dashboard() {
       });
 
       const invoiceId = res1.data.invoice.id;
-
-      // 2. Mark Paid
       await axios.put(`${API_URL}/invoices/${invoiceId}/pay`);
 
-      // 3. Generate WhatsApp Link with Receipt
       const receiptLink = `${API_URL}/invoices/${invoiceId}/receipt`;
-
       const message = `Hello! Fees for ${student.name} is received. Your Green Tick Receipt is ready! Download here: ${receiptLink}`;
+      const whatsappUrl = `https://wa.me/${student.parent_phone}?text=${encodeURIComponent(message)}`;
 
-      const whatsappUrl = `https://wa.me/${
-        student.parent_phone
-      }?text=${encodeURIComponent(message)}`;
-
-      // 4. Open WhatsApp
       window.open(whatsappUrl, "_blank");
-      
+      fetchStudents(tutor!.id); // Refresh to show updated status
     } catch (err: any) {
       alert(err.response?.data?.error || "Error marking paid");
     }
   };
+
+  // Filter students based on active tab
+  const filteredStudents = students.filter((student) => {
+    if (activeTab === "paid") return student.status === "PAID";
+    if (activeTab === "unpaid") return student.status === "PENDING" || !student.status;
+    return true; // "all" tab
+  });
+
+  const paidCount = students.filter((s) => s.status === "PAID").length;
+  const unpaidCount = students.filter((s) => s.status === "PENDING" || !s.status).length;
 
   if (isLoading) return <div className="p-10 text-center">Loading Dashboard...</div>;
 
@@ -179,13 +202,13 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
-        <div className="flex justify-between items-center max-w-md mx-auto">
+        <div className="flex justify-between items-center max-w-4xl mx-auto">
           <div>
             <h1 className="text-xl font-bold text-gray-800">My Students</h1>
             <p className="text-sm text-gray-500">{tutor?.business_name}</p>
           </div>
 
-          {/* Add Student Button (Opens Modal) */}
+          {/* Add Student Button */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="bg-blue-600 rounded-full h-10 w-10 p-0">
@@ -247,60 +270,127 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Student List */}
-      <div className="max-w-md mx-auto p-4 space-y-3">
-        {students.length === 0 ? (
-          <div className="text-center text-gray-500 mt-10">
-            <User className="h-12 w-12 mx-auto mb-2 opacity-20" />
-            <p>No students yet.</p>
-            <p className="text-sm">Click the + button to add one.</p>
-          </div>
-        ) : (
-          students.map((student) => (
-            <Card
-              key={student.id}
-              className="overflow-hidden shadow-sm hover:shadow-md transition"
-            >
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
-                      {student.name.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="font-semibold text-gray-800">
-                      {student.name}
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      Fee: ₹{student.standard_fee}
-                    </p>
-                  </div>
-                </div>
+      {/* Filter Tabs */}
+      <div className="max-w-4xl mx-auto p-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="all">
+              All ({students.length})
+            </TabsTrigger>
+            <TabsTrigger value="unpaid">
+              Unpaid ({unpaidCount})
+            </TabsTrigger>
+            <TabsTrigger value="paid">
+              Paid ({paidCount})
+            </TabsTrigger>
+          </TabsList>
 
-                <div className="flex gap-2">
-                  {/* NEW: Request Fee Button (Zero-Cost Payment Link) */}
-                  <Button
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => handleRequestPayment(student)}
-                  >
-                    Request Fee
-                  </Button>
-                  {/* Existing: Mark Paid Button (Manual Verification) */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-gray-600 border-gray-200 hover:bg-gray-50"
-                    onClick={() => handleMarkPaid(student)}
-                  >
-                    Mark Paid
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
+          <TabsContent value={activeTab} className="mt-4 space-y-3">
+            {filteredStudents.length === 0 ? (
+              <div className="text-center text-gray-500 mt-10">
+                <User className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                <p>No students in this category.</p>
+                {activeTab === "all" && (
+                  <p className="text-sm">Click the + button to add one.</p>
+                )}
+              </div>
+            ) : (
+              filteredStudents.map((student) => (
+                <Card
+                  key={student.id}
+                  className="overflow-hidden shadow-sm hover:shadow-md transition"
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      {/* Student Info */}
+                      <div className="flex items-center gap-3 flex-1">
+                        <Avatar>
+                          <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
+                            {student.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-gray-800">
+                              {student.name}
+                            </h3>
+                            {student.status === "PAID" ? (
+                              <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Paid
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-orange-600 border-orange-300">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Pending
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Fee: ₹{student.standard_fee}
+                            {student.last_payment_month && (
+                              <span className="ml-2">• Last paid: {student.last_payment_month}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2 items-center">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          onClick={() => handleRequestPayment(student)}
+                        >
+                          Request Fee
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-gray-600 border-gray-200 hover:bg-gray-50"
+                          onClick={() => handleMarkPaid(student)}
+                        >
+                          Mark Paid
+                        </Button>
+                        
+                        {/* Delete Button with Confirmation */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Student?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete <strong>{student.name}</strong> and all their payment records.
+                                This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={() => handleDeleteStudent(student.id, student.name)}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
