@@ -58,7 +58,7 @@ const createOrder = async (req, res) => {
         const options = {
             amount: parseFloat(amount) * 100, // Convert to paise
             currency: 'INR',
-            receipt: `receipt_${invoiceId}`,
+            receipt: invoiceId.substring(0, 36), // Use first 36 chars of UUID (max 40 allowed)
             notes: {
                 student_id: student_id,
                 tutor_id: tutor_id,
