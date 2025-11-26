@@ -7,6 +7,8 @@ const db = require('./config/db');
 const tutorRoutes = require('./routes/tutorRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
+const initCronJobs = require('./cron/reminderCron');
+const { handleRazorpayWebhook } = require('./controllers/webhookController');
 
 const app = express();
 
@@ -18,6 +20,12 @@ app.use(morgan('dev')); // Log requests
 app.use('/api/tutors', tutorRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/invoices', invoiceRoutes); 
+
+// Start the Automated Reminders
+initCronJobs();
+
+// Webhook Route (Must be POST)
+app.post('/api/webhooks/razorpay', handleRazorpayWebhook);
 
 // --- 2. HEALTH CHECK ROUTE ---
 // Use this to verify your server is alive

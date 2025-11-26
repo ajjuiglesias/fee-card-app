@@ -8,7 +8,6 @@ import { Plus, User, Clock } from "lucide-react";
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -91,6 +90,86 @@ export default function Dashboard() {
       setNewStudent({ name: "", parent_phone: "", standard_fee: "" }); // Reset form
     } catch (error) {
       alert("Failed to add student");
+    }
+  };
+
+// client/src/app/dashboard/page.tsx
+
+  // ... inside your Dashboard component ...
+
+  const handleRequestPayment = (student: Student) => {
+    if (!tutor) {
+      alert("Tutor data missing. Please log in again.");
+      return;
+    }
+
+    // A. Prepare Data
+    const baseUrl = window.location.origin; 
+    
+    const params = new URLSearchParams({
+      // DATA FOR PAYMENT PROCESSING
+      sid: student.id,       // <--- NEW: Student ID
+      tid: tutor.id,         // <--- NEW: Tutor ID
+      am: student.standard_fee,
+      
+      // DATA FOR DISPLAY ONLY
+      pn: tutor.business_name, 
+      tn: `Fee for ${student.name}`,
+    });
+
+    // B. Generate Link
+    const paymentPageLink = `${baseUrl}/pay?${params.toString()}`;
+
+    // C. WhatsApp Message
+    const messageText = encodeURIComponent(
+      `*Fees Due for ${student.name}: ₹${student.standard_fee}*\n\nClick below to pay securely:\n${paymentPageLink}\n\n*Receipt will be sent automatically after payment.*`
+    );
+
+    const whatsappUrl = `https://wa.me/${student.parent_phone}?text=${messageText}`;
+    window.open(whatsappUrl, "_blank");
+  };
+
+  
+  // 6. Existing Mark Paid Handler (Steps 3-6)
+  const handleMarkPaid = async (student: Student) => {
+    if (
+      !confirm(
+        `Mark ${student.name} as PAID for this month and generate receipt?`
+      )
+    )
+      return;
+
+    try {
+      // 1. Create Invoice
+      const res1 = await axios.post(`${API_URL}/invoices/create`, {
+        student_id: student.id,
+        tutor_id: tutor?.id,
+        month_name: new Date().toLocaleString("default", {
+          month: "long",
+          year: "numeric",
+        }),
+        amount: student.standard_fee,
+      });
+
+      const invoiceId = res1.data.invoice.id;
+
+      // 2. Mark Paid
+      await axios.put(`${API_URL}/invoices/${invoiceId}/pay`);
+
+      // 3. Generate WhatsApp Link with Receipt
+      const receiptLink = `${API_URL}/invoices/${invoiceId}/receipt`;
+
+      const message = `Hello! Fees for ${student.name} is received. Your Green Tick Receipt is ready! Download here: ${receiptLink}`;
+
+      const whatsappUrl = `https://wa.me/${
+        student.parent_phone
+      }?text=${encodeURIComponent(message)}`;
+
+      // 4. Open WhatsApp
+      window.open(whatsappUrl, "_blank");
+      
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Error marking paid");
     }
   };
 
@@ -200,53 +279,20 @@ export default function Dashboard() {
                 </div>
 
                 <div className="flex gap-2">
+                  {/* NEW: Request Fee Button (Zero-Cost Payment Link) */}
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => handleRequestPayment(student)}
+                  >
+                    Request Fee
+                  </Button>
+                  {/* Existing: Mark Paid Button (Manual Verification) */}
                   <Button
                     size="sm"
                     variant="outline"
-                    className="text-green-600 border-green-200 hover:bg-green-50"
-                    onClick={async () => {
-                      if (
-                        !confirm(
-                          `Mark ${student.name} as PAID for this month?`
-                        )
-                      )
-                        return;
-
-                      try {
-                        // 1. Create Invoice
-                        const res1 = await axios.post(
-                          `${API_URL}/invoices/create`,
-                          {
-                            student_id: student.id,
-                            tutor_id: tutor?.id,
-                            month_name: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
-                            amount: student.standard_fee,
-                          }
-                        );
-
-                        const invoiceId = res1.data.invoice.id;
-
-                        // 2. Mark Paid
-                        await axios.put(
-                          `${API_URL}/invoices/${invoiceId}/pay`
-                        );
-
-                        // 3. Generate WhatsApp Link
-                        const receiptLink = `${API_URL}/invoices/${invoiceId}/receipt`;
-                        
-                        const message = `Hello! Fees for ${student.name} is received. Download Receipt: ${receiptLink}`;
-                        
-                        const whatsappUrl = `https://wa.me/${student.parent_phone}?text=${encodeURIComponent(message)}`;
-
-                        // 4. Open WhatsApp
-                        window.open(whatsappUrl, "_blank");
-
-                      } catch (err: any) {
-                        alert(
-                          err.response?.data?.error || "Error marking paid"
-                        );
-                      }
-                    }}
+                    className="text-gray-600 border-gray-200 hover:bg-gray-50"
+                    onClick={() => handleMarkPaid(student)}
                   >
                     Mark Paid
                   </Button>
