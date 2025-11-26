@@ -20,6 +20,7 @@ function PaymentPageContent() {
   const businessName = searchParams.get("pn"); // Display name
   
   const [isLoading, setIsLoading] = useState(false);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
   const handlePay = async () => {
@@ -28,10 +29,18 @@ function PaymentPageContent() {
       return;
     }
 
+    // Check if Razorpay script is loaded
+    if (!scriptLoaded || !(window as any).Razorpay) {
+      alert("Payment system is loading. Please try again in a moment.");
+      return;
+    }
+
     setIsLoading(true);
+    console.log("🔄 Initiating payment...", { amount, studentId, tutorId });
 
     try {
       // 1. Create Order
+      console.log("📡 Creating order at:", `${API_URL}/payment/order`);
       const orderRes = await axios.post(`${API_URL}/payment/order`, {
         amount: amount,
         student_id: studentId,
@@ -39,6 +48,7 @@ function PaymentPageContent() {
         month_name: new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
       });
 
+      console.log("✅ Order created:", orderRes.data);
       const { id: order_id, currency, key_id } = orderRes.data;
 
       // 2. Open Razorpay
@@ -51,6 +61,7 @@ function PaymentPageContent() {
         order_id: order_id,
         handler: async function (response: any) {
           // 3. Payment Success - Verify on Backend
+          console.log("💳 Payment completed, verifying...", response);
           try {
              const verifyRes = await axios.post(`${API_URL}/payment/verify`, {
               razorpay_payment_id: response.razorpay_payment_id,
@@ -58,12 +69,20 @@ function PaymentPageContent() {
               razorpay_signature: response.razorpay_signature,
             });
 
+            console.log("✅ Payment verified:", verifyRes.data);
             if (verifyRes.data.status === "success") {
               alert("Payment Successful! Receipt has been sent to WhatsApp.");
               // Optional: Redirect to a success page
             }
-          } catch (err) {
-            alert("Payment verification failed. Please contact tutor.");
+          } catch (err: any) {
+            console.error("❌ Verification failed:", err);
+            alert(`Payment verification failed: ${err.response?.data?.error || err.message}`);
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            console.log("⚠️ Payment cancelled by user");
+            setIsLoading(false);
           }
         },
         prefill: {
@@ -75,12 +94,14 @@ function PaymentPageContent() {
         },
       };
 
+      console.log("🚀 Opening Razorpay modal...");
       const paymentObject = new (window as any).Razorpay(options);
       paymentObject.open();
       
-    } catch (err) {
-      console.error(err);
-      alert("Failed to initiate payment. Server might be down.");
+    } catch (err: any) {
+      console.error("❌ Payment initiation failed:", err);
+      const errorMessage = err.response?.data?.error || err.message || "Unknown error";
+      alert(`Failed to initiate payment: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +110,17 @@ function PaymentPageContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       {/* Load Razorpay SDK */}
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+      <Script 
+        src="https://checkout.razorpay.com/v1/checkout.js" 
+        onLoad={() => {
+          console.log("✅ Razorpay script loaded");
+          setScriptLoaded(true);
+        }}
+        onError={() => {
+          console.error("❌ Failed to load Razorpay script");
+          alert("Failed to load payment system. Please refresh the page.");
+        }}
+      />
 
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center border-b bg-white">
@@ -111,11 +142,15 @@ function PaymentPageContent() {
           <Button 
             className="w-full h-12 text-lg bg-blue-600 hover:bg-blue-700" 
             onClick={handlePay}
-            disabled={isLoading}
+            disabled={isLoading || !scriptLoaded}
           >
             {isLoading ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" /> Processing...
+              </div>
+            ) : !scriptLoaded ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading...
               </div>
             ) : (
               `Pay ₹${amount}`

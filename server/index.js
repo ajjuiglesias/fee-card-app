@@ -7,6 +7,7 @@ const db = require('./config/db');
 const tutorRoutes = require('./routes/tutorRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const initCronJobs = require('./cron/reminderCron');
 const { handleRazorpayWebhook } = require('./controllers/webhookController');
 
@@ -19,7 +20,8 @@ app.use(express.json()); // Parse JSON bodies
 app.use(morgan('dev')); // Log requests
 app.use('/api/tutors', tutorRoutes);
 app.use('/api/students', studentRoutes);
-app.use('/api/invoices', invoiceRoutes); 
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // Start the Automated Reminders
 initCronJobs();
@@ -32,10 +34,10 @@ app.post('/api/webhooks/razorpay', handleRazorpayWebhook);
 app.get('/', async (req, res) => {
     try {
         // Test DB connection
-        const result = await db.query('SELECT NOW()'); 
-        res.json({ 
-            status: 'Active', 
-            db_time: result.rows[0].now 
+        const result = await db.query('SELECT NOW()');
+        res.json({
+            status: 'Active',
+            db_time: result.rows[0].now
         });
     } catch (error) {
         res.status(500).json({ status: 'Error', error: error.message });
