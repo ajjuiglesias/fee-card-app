@@ -219,7 +219,7 @@ export default function Dashboard() {
                           {
                             student_id: student.id,
                             tutor_id: tutor?.id,
-                            month_name: "November 2025",
+                            month_name: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
                             amount: student.standard_fee,
                           }
                         );
