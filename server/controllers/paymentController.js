@@ -155,15 +155,20 @@ const verifyPayment = async (req, res) => {
             invoice.business_name
         );
 
-        // 7. In production, you would send this via WhatsApp
-        // For now, we'll just return success
-        // You can integrate WhatsApp API here if needed
+        // 7. Generate Receipt URL
+        const receiptUrl = `${process.env.API_URL || 'https://fee-card-app.onrender.com'}/api/invoices/${invoice_id}/receipt`;
+
+        // 8. Prepare WhatsApp message
+        const whatsappMessage = `✅ *Payment Received!*\n\nDear Parent,\n\nPayment for *${invoice.student_name}* has been successfully received.\n\n*Amount:* ₹${invoice.amount}\n*Month:* ${invoice.month_name}\n*Business:* ${invoice.business_name}\n\nYour receipt is ready! Download it here:\n${receiptUrl}\n\nThank you!`;
+
+        const whatsappUrl = `https://wa.me/${invoice.parent_phone}?text=${encodeURIComponent(whatsappMessage)}`;
 
         res.json({
             status: 'success',
             message: 'Payment verified successfully',
             invoice_id: invoice_id,
-            receipt_url: `${process.env.API_URL || 'http://localhost:5000'}/api/invoices/${invoice_id}/receipt`
+            receipt_url: receiptUrl,
+            whatsapp_url: whatsappUrl // Send WhatsApp URL to frontend
         });
 
     } catch (error) {

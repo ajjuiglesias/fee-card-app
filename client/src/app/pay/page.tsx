@@ -53,37 +53,6 @@ function PaymentPageContent() {
 
       // 2. Open Razorpay
       const options = {
-        key: key_id, 
-        amount: parseFloat(amount) * 100,
-        currency: currency,
-        name: businessName || "Fee Payment",
-        description: "Monthly Tuition Fee",
-        order_id: order_id,
-        handler: async function (response: any) {
-          // 3. Payment Success - Verify on Backend
-          console.log("💳 Payment completed, verifying...", response);
-          try {
-             const verifyRes = await axios.post(`${API_URL}/payment/verify`, {
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-
-            console.log("✅ Payment verified:", verifyRes.data);
-            if (verifyRes.data.status === "success") {
-              alert("Payment Successful! Receipt has been sent to WhatsApp.");
-              // Optional: Redirect to a success page
-            }
-          } catch (err: any) {
-            console.error("❌ Verification failed:", err);
-            alert(`Payment verification failed: ${err.response?.data?.error || err.message}`);
-          }
-        },
-        modal: {
-          ondismiss: function() {
-            console.log("⚠️ Payment cancelled by user");
-            setIsLoading(false);
-          }
         },
         prefill: {
           name: "Parent", // You could pass parent name in URL to prefill this
